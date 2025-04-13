@@ -5,7 +5,9 @@
   "license": "MIT",
   "require": {
     "php": "^8.1",
-    "symfony/http-foundation": "^6.4",
+    "symfony/config": "^6.4",
+    "symfony/dependency-injection": "^6.4",
+    "symfony/http-kernel": "^6.4",
     "symfony/framework-bundle": "^6.4",
     "tourze/json-rpc-core": "0.0.*"
   },
