@@ -9,6 +9,7 @@
     "symfony/dependency-injection": "^6.4",
     "symfony/http-kernel": "^6.4",
     "symfony/framework-bundle": "^6.4",
+    "symfony/yaml": "^6.4 || ^7.1",
     "tourze/json-rpc-core": "0.0.*"
   },
   "autoload": {
