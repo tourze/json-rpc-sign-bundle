@@ -15,7 +15,7 @@
     "symfony/yaml": "^6.4 || ^7.1",
     "tourze/doctrine-helper": "0.0.*",
     "tourze/json-rpc-core": "^0.0.6",
-    "tourze/json-rpc-caller-bundle": "0.0.*",
+    "tourze/json-rpc-caller-bundle": "0.1.*",
     "psr/log": "^3|^2|^1"
   },
   "autoload": {
