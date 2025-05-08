@@ -2,6 +2,7 @@
 
 namespace Tourze\JsonRPCSignBundle\EventSubscriber;
 
+use Monolog\Attribute\WithMonologChannel;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -23,12 +24,13 @@ use Tourze\JsonRPCSignBundle\Service\Signer;
  *
  * @see https://help.aliyun.com/document_detail/131955.html
  */
+#[WithMonologChannel('procedure')]
 class CheckSignSubscriber
 {
     public function __construct(
         private readonly RequestStack $requestStack,
         private readonly Signer $signer,
-        private readonly LoggerInterface $procedureLogger,
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -49,7 +51,7 @@ class CheckSignSubscriber
 
         $this->signer->checkRequest($request);
 
-        $this->procedureLogger->info('签名校验通过，允许访问接口', [
+        $this->logger->info('签名校验通过，允许访问接口', [
             'method' => $event->getMethod(),
             'request' => $request,
         ]);
