@@ -16,7 +16,8 @@
     "tourze/doctrine-helper": "0.0.*",
     "tourze/json-rpc-core": "^0.0.6",
     "tourze/json-rpc-caller-bundle": "0.1.*",
-    "psr/log": "^3|^2|^1"
+    "psr/log": "^3|^2|^1",
+    "symfony/event-dispatcher": "^6.4"
   },
   "autoload": {
     "psr-4": {
