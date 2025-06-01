@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tourze\JsonRPCSignBundle\Tests\Service;
 
-use Carbon\Carbon;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
