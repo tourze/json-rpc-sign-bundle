@@ -2,7 +2,7 @@
 
 namespace Tourze\JsonRPCSignBundle\Service;
 
-use Carbon\Carbon;
+use Carbon\CarbonImmutable;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Tourze\JsonRPCCallerBundle\Repository\ApiCallerRepository;
@@ -85,7 +85,7 @@ class Signer
         // 如果客户端时间跟服务端时间相差太大，就不允许继续
         $SignatureTimestamp = $request->headers->get('Signature-Timestamp', '');
         $tolerateSeconds = $caller->getSignTimeoutSecond() ?: 60 * 3; // 默认允许3分钟误差
-        if (abs(Carbon::now()->getTimestamp() - $SignatureTimestamp) > $tolerateSeconds) {
+        if (abs(CarbonImmutable::now()->getTimestamp() - $SignatureTimestamp) > $tolerateSeconds) {
             throw new SignTimeoutException();
         }
 
