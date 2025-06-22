@@ -38,13 +38,16 @@ class CheckSignSubscriber
     public function beforeMethodApply(BeforeMethodApplyEvent $event): void
     {
         $CheckSign = ReflectionHelper::getClassReflection($event->getMethod())->getAttributes(CheckSign::class);
-        if (!$CheckSign) {
+        if (empty($CheckSign)) {
             // 不需要做签名处理
             return;
         }
 
         // TODO 这个对象最好是通过事件来传递
         $request = $this->requestStack->getMainRequest();
+        if ($request === null) {
+            throw new \RuntimeException('No request available');
+        }
         if ($request->query->get('__ignoreSign') === ($_ENV['JSON_RPC_GOD_SIGN'] ?? 'god')) {
             return;
         }

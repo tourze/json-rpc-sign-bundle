@@ -83,14 +83,17 @@ class Signer
         $signType = "{$signMethod}-{$signVersion}";
 
         // 如果客户端时间跟服务端时间相差太大，就不允许继续
-        $SignatureTimestamp = $request->headers->get('Signature-Timestamp', '');
+        $SignatureTimestamp = $request->headers->get('Signature-Timestamp');
+        if (empty($SignatureTimestamp)) {
+            throw new SignTimeoutException();
+        }
         $tolerateSeconds = $caller->getSignTimeoutSecond() ?: 60 * 3; // 默认允许3分钟误差
-        if (abs(CarbonImmutable::now()->getTimestamp() - $SignatureTimestamp) > $tolerateSeconds) {
+        if (abs(CarbonImmutable::now()->getTimestamp() - (int) $SignatureTimestamp) > $tolerateSeconds) {
             throw new SignTimeoutException();
         }
 
         $Signature = $request->headers->get('Signature');
-        if ($Signature) {
+        if (!empty($Signature)) {
             $ServerSign = null;
             $rawText = '';
             if ('md5-1.0' === $signType) {

@@ -250,8 +250,9 @@ class CheckSignSubscriberTest extends TestCase
             ->method('getMainRequest')
             ->willReturn(null);
 
-        // 验证会抛出Error（由于null->query->get()调用）
-        $this->expectException(\Error::class);
+        // 验证会抛出RuntimeException
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('No request available');
 
         $this->subscriber->beforeMethodApply($event);
     }
