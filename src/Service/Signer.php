@@ -87,7 +87,7 @@ class Signer
         if (empty($SignatureTimestamp)) {
             throw new SignTimeoutException();
         }
-        $tolerateSeconds = $caller->getSignTimeoutSecond() ?: 60 * 3; // 默认允许3分钟误差
+        $tolerateSeconds = $caller->getSignTimeoutSecond() ?? 60 * 3; // 默认允许3分钟误差
         if (abs(CarbonImmutable::now()->getTimestamp() - (int) $SignatureTimestamp) > $tolerateSeconds) {
             throw new SignTimeoutException();
         }

@@ -10,6 +10,7 @@ use Tourze\DoctrineHelper\ReflectionHelper;
 use Tourze\JsonRPC\Core\Event\BeforeMethodApplyEvent;
 use Tourze\JsonRPCSignBundle\Attribute\CheckSign;
 use Tourze\JsonRPCSignBundle\Service\Signer;
+use Tourze\JsonRPCSignBundle\Exception\RequestNotAvailableException;
 
 /**
  * 签名检查，参考了阿里云开放服务的签名设计，做了一些调整。
@@ -24,7 +25,7 @@ use Tourze\JsonRPCSignBundle\Service\Signer;
  *
  * @see https://help.aliyun.com/document_detail/131955.html
  */
-#[WithMonologChannel('procedure')]
+#[WithMonologChannel(channel: 'procedure')]
 class CheckSignSubscriber
 {
     public function __construct(
@@ -46,7 +47,7 @@ class CheckSignSubscriber
         // TODO 这个对象最好是通过事件来传递
         $request = $this->requestStack->getMainRequest();
         if ($request === null) {
-            throw new \RuntimeException('No request available');
+            throw new RequestNotAvailableException('No request available');
         }
         if ($request->query->get('__ignoreSign') === ($_ENV['JSON_RPC_GOD_SIGN'] ?? 'god')) {
             return;
