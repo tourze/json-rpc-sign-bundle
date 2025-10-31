@@ -4,17 +4,20 @@ declare(strict_types=1);
 
 namespace Tourze\JsonRPCSignBundle\Tests\Exception;
 
-use PHPUnit\Framework\TestCase;
-use Tourze\JsonRPC\Core\Exception\JsonRpcExceptionInterface;
+use PHPUnit\Framework\Attributes\CoversClass;
 use Tourze\JsonRPCSignBundle\Exception\SignErrorException;
+use Tourze\PHPUnitBase\AbstractExceptionTestCase;
 
-class SignErrorExceptionTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(SignErrorException::class)]
+final class SignErrorExceptionTest extends AbstractExceptionTestCase
 {
     public function testDefaultExceptionValues(): void
     {
         $exception = new SignErrorException();
 
-        $this->assertInstanceOf(JsonRpcExceptionInterface::class, $exception);
         $this->assertEquals(-32600, $exception->getCode());
         $this->assertEquals(-32600, $exception->getErrorCode());
         $this->assertEquals('签名错误', $exception->getMessage());

@@ -4,17 +4,20 @@ declare(strict_types=1);
 
 namespace Tourze\JsonRPCSignBundle\Tests\Exception;
 
-use PHPUnit\Framework\TestCase;
-use Tourze\JsonRPC\Core\Exception\JsonRpcExceptionInterface;
+use PHPUnit\Framework\Attributes\CoversClass;
 use Tourze\JsonRPCSignBundle\Exception\SignNonceMissingException;
+use Tourze\PHPUnitBase\AbstractExceptionTestCase;
 
-class SignNonceMissingExceptionTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(SignNonceMissingException::class)]
+final class SignNonceMissingExceptionTest extends AbstractExceptionTestCase
 {
     public function testDefaultExceptionValues(): void
     {
         $exception = new SignNonceMissingException();
 
-        $this->assertInstanceOf(JsonRpcExceptionInterface::class, $exception);
         $this->assertEquals(-32600, $exception->getCode());
         $this->assertEquals(-32600, $exception->getErrorCode());
         $this->assertEquals('缺少必要的随机字符串', $exception->getMessage());

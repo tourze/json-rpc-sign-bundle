@@ -6,11 +6,10 @@ use Monolog\Attribute\WithMonologChannel;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpFoundation\RequestStack;
-use Tourze\DoctrineHelper\ReflectionHelper;
 use Tourze\JsonRPC\Core\Event\BeforeMethodApplyEvent;
 use Tourze\JsonRPCSignBundle\Attribute\CheckSign;
-use Tourze\JsonRPCSignBundle\Service\Signer;
 use Tourze\JsonRPCSignBundle\Exception\RequestNotAvailableException;
+use Tourze\JsonRPCSignBundle\Service\Signer;
 
 /**
  * 签名检查，参考了阿里云开放服务的签名设计，做了一些调整。
@@ -26,27 +25,28 @@ use Tourze\JsonRPCSignBundle\Exception\RequestNotAvailableException;
  * @see https://help.aliyun.com/document_detail/131955.html
  */
 #[WithMonologChannel(channel: 'procedure')]
-class CheckSignSubscriber
+readonly class CheckSignSubscriber
 {
     public function __construct(
-        private readonly RequestStack $requestStack,
-        private readonly Signer $signer,
-        private readonly LoggerInterface $logger,
+        private RequestStack $requestStack,
+        private Signer $signer,
+        private LoggerInterface $logger,
     ) {
     }
 
     #[AsEventListener]
     public function beforeMethodApply(BeforeMethodApplyEvent $event): void
     {
-        $CheckSign = ReflectionHelper::getClassReflection($event->getMethod())->getAttributes(CheckSign::class);
-        if (empty($CheckSign)) {
+        $reflection = new \ReflectionClass($event->getMethod());
+        $CheckSign = $reflection->getAttributes(CheckSign::class);
+        if ([] === $CheckSign) {
             // 不需要做签名处理
             return;
         }
 
         // TODO 这个对象最好是通过事件来传递
         $request = $this->requestStack->getMainRequest();
-        if ($request === null) {
+        if (null === $request) {
             throw new RequestNotAvailableException('No request available');
         }
         if ($request->query->get('__ignoreSign') === ($_ENV['JSON_RPC_GOD_SIGN'] ?? 'god')) {

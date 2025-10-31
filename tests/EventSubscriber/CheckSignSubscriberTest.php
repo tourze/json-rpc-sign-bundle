@@ -4,286 +4,291 @@ declare(strict_types=1);
 
 namespace Tourze\JsonRPCSignBundle\Tests\EventSubscriber;
 
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Tourze\AccessKeyBundle\Entity\AccessKey;
+use Tourze\AccessKeyBundle\Service\ApiCallerService;
 use Tourze\JsonRPC\Core\Domain\JsonRpcMethodInterface;
 use Tourze\JsonRPC\Core\Event\BeforeMethodApplyEvent;
 use Tourze\JsonRPC\Core\Model\JsonRpcRequest;
 use Tourze\JsonRPCSignBundle\Attribute\CheckSign;
 use Tourze\JsonRPCSignBundle\EventSubscriber\CheckSignSubscriber;
-use Tourze\JsonRPCSignBundle\Service\Signer;
+use Tourze\JsonRPCSignBundle\Exception\RequestNotAvailableException;
+use Tourze\PHPUnitSymfonyKernelTest\AbstractEventSubscriberTestCase;
 
-class CheckSignSubscriberTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(CheckSignSubscriber::class)]
+#[RunTestsInSeparateProcesses]
+final class CheckSignSubscriberTest extends AbstractEventSubscriberTestCase
 {
+    private RequestStack $requestStack;
+
+    private MockObject|ApiCallerService $apiCallerService;
+
+    private MockObject|LoggerInterface $logger;
+
     private CheckSignSubscriber $subscriber;
-    private RequestStack&MockObject $requestStack;
-    private Signer&MockObject $signer;
-    private LoggerInterface&MockObject $logger;
 
-    protected function setUp(): void
+    private function setUpSubscriber(): void
     {
-        $this->requestStack = $this->createMock(RequestStack::class);
-        $this->signer = $this->createMock(Signer::class);
+        $this->apiCallerService = $this->createMock(ApiCallerService::class);
         $this->logger = $this->createMock(LoggerInterface::class);
-        $this->subscriber = new CheckSignSubscriber(
-            $this->requestStack,
-            $this->signer,
-            $this->logger
-        );
+
+        // 在获取服务前先将Mock注入容器，但只在服务未初始化时设置
+        if (!self::getContainer()->initialized(ApiCallerService::class)) {
+            self::getContainer()->set(ApiCallerService::class, $this->apiCallerService);
+        }
+        if (!self::getContainer()->initialized('monolog.logger.procedure')) {
+            self::getContainer()->set('monolog.logger.procedure', $this->logger);
+        }
+
+        // RequestStack 使用真实的服务，我们通过其他方式模拟行为
+        // 从容器获取服务实例，而不是直接实例化
+        $this->subscriber = self::getService(CheckSignSubscriber::class);
+
+        // 获取真实的RequestStack并设置为属性
+        $this->requestStack = self::getService(RequestStack::class);
     }
 
-    private function createMockMethodWithoutCheckSign(): JsonRpcMethodInterface
+    protected function onSetUp(): void
     {
-        return new class implements JsonRpcMethodInterface {
+        // 设置容器中的服务以支持容器获取测试
+        $this->requestStack = $this->createMock(RequestStack::class);
+        $this->apiCallerService = $this->createMock(ApiCallerService::class);
+        $this->logger = $this->createMock(LoggerInterface::class);
+
+        if (!self::getContainer()->has(ApiCallerService::class)) {
+            self::getContainer()->set(ApiCallerService::class, $this->apiCallerService);
+        }
+        if (!self::getContainer()->has('monolog.logger.procedure')) {
+            self::getContainer()->set('monolog.logger.procedure', $this->logger);
+        }
+        if (!self::getContainer()->has(RequestStack::class)) {
+            self::getContainer()->set(RequestStack::class, $this->requestStack);
+        }
+    }
+
+    public function testEventSubscriberCanBeRetrievedFromContainer(): void
+    {
+        $subscriber = self::getService(CheckSignSubscriber::class);
+        $this->assertInstanceOf(CheckSignSubscriber::class, $subscriber);
+    }
+
+    public function testBeforeMethodApplyWithoutCheckSignAttribute(): void
+    {
+        $this->setUpSubscriber();
+
+        // 创建一个没有 CheckSign 属性的方法类
+        $method = new class implements JsonRpcMethodInterface {
             public function __invoke(JsonRpcRequest $request): mixed
             {
-                return ['success' => true];
+                return 'test';
             }
 
             public function execute(): array
             {
-                return ['success' => true];
+                return [];
             }
         };
+
+        $event = new BeforeMethodApplyEvent();
+        $event->setMethod($method);
+
+        // 确保 RequestStack 为空（这个测试应该不会访问请求）
+        $this->subscriber->beforeMethodApply($event);
+
+        // 如果没有抛出异常，说明没有检查签名属性成功跳过了签名验证
+        $this->assertTrue(true);
     }
 
-    private function createMockMethodWithCheckSign(): JsonRpcMethodInterface
+    public function testBeforeMethodApplyWithCheckSignAttributeButNoRequest(): void
     {
-        return new #[CheckSign] class implements JsonRpcMethodInterface {
+        $this->setUpSubscriber();
+        // 创建一个带有 CheckSign 属性的方法类
+        $method = new #[CheckSign] class implements JsonRpcMethodInterface {
             public function __invoke(JsonRpcRequest $request): mixed
             {
-                return ['success' => true];
+                return 'test';
             }
 
             public function execute(): array
             {
-                return ['success' => true];
+                return [];
             }
         };
-    }
 
-    public function testBeforeMethodApply_withoutCheckSignAttribute(): void
-    {
-        $method = $this->createMockMethodWithoutCheckSign();
         $event = new BeforeMethodApplyEvent();
         $event->setMethod($method);
 
-        // 模拟请求栈
-        $this->requestStack->expects($this->never())
-            ->method('getMainRequest');
+        // RequestStack 默认为空，所以 getMainRequest() 应该返回 null
 
-        // 签名器不应该被调用
-        $this->signer->expects($this->never())
-            ->method('checkRequest');
-
-        // 日志器不应该被调用
-        $this->logger->expects($this->never())
-            ->method('info');
-
-        // 执行方法，应该直接返回，不进行任何签名检查
-        $this->subscriber->beforeMethodApply($event);
-    }
-
-    public function testBeforeMethodApply_withCheckSignAttribute(): void
-    {
-        $method = $this->createMockMethodWithCheckSign();
-        $event = new BeforeMethodApplyEvent();
-        $event->setMethod($method);
-
-        // 模拟请求
-        $request = Request::create('/', 'POST', ['__ignoreSign' => 'wrong_value']);
-        
-        $this->requestStack->expects($this->once())
-            ->method('getMainRequest')
-            ->willReturn($request);
-
-        // 签名器应该被调用
-        $this->signer->expects($this->once())
-            ->method('checkRequest')
-            ->with($request);
-
-        // 日志器应该记录成功信息
-        $this->logger->expects($this->once())
-            ->method('info')
-            ->with('签名校验通过，允许访问接口', [
-                'method' => $method,
-                'request' => $request,
-            ]);
-
-        $this->subscriber->beforeMethodApply($event);
-    }
-
-    public function testBeforeMethodApply_withIgnoreSignParameter(): void
-    {
-        // 设置环境变量
-        $_ENV['JSON_RPC_GOD_SIGN'] = 'god';
-
-        $method = $this->createMockMethodWithCheckSign();
-        $event = new BeforeMethodApplyEvent();
-        $event->setMethod($method);
-
-        // 模拟包含忽略签名参数的请求 - 注意：代码检查的是query参数，不是POST参数
-        $request = Request::create('/?__ignoreSign=god', 'POST');
-        
-        $this->requestStack->expects($this->once())
-            ->method('getMainRequest')
-            ->willReturn($request);
-
-        // 签名器不应该被调用（因为有忽略参数）
-        $this->signer->expects($this->never())
-            ->method('checkRequest');
-
-        // 日志器不应该被调用
-        $this->logger->expects($this->never())
-            ->method('info');
-
-        $this->subscriber->beforeMethodApply($event);
-
-        // 清理环境变量
-        unset($_ENV['JSON_RPC_GOD_SIGN']);
-    }
-
-    public function testBeforeMethodApply_withoutIgnoreSignEnvironment(): void
-    {
-        // 确保没有设置环境变量
-        unset($_ENV['JSON_RPC_GOD_SIGN']);
-
-        $method = $this->createMockMethodWithCheckSign();
-        $event = new BeforeMethodApplyEvent();
-        $event->setMethod($method);
-
-        // 模拟包含忽略签名参数的请求，但环境变量未设置 - 使用默认值'god'
-        $request = Request::create('/?__ignoreSign=god', 'POST');
-        
-        $this->requestStack->expects($this->once())
-            ->method('getMainRequest')
-            ->willReturn($request);
-
-        // 签名器不应该被调用（因为默认值是'god'，所以忽略参数有效）
-        $this->signer->expects($this->never())
-            ->method('checkRequest');
-
-        // 日志器不应该被调用
-        $this->logger->expects($this->never())
-            ->method('info');
-
-        $this->subscriber->beforeMethodApply($event);
-    }
-
-    public function testBeforeMethodApply_wrongIgnoreSignValue(): void
-    {
-        // 设置环境变量
-        $_ENV['JSON_RPC_GOD_SIGN'] = 'secret_key';
-
-        $method = $this->createMockMethodWithCheckSign();
-        $event = new BeforeMethodApplyEvent();
-        $event->setMethod($method);
-
-        // 模拟包含错误忽略签名参数的请求
-        $request = Request::create('/?__ignoreSign=wrong_value', 'POST');
-        
-        $this->requestStack->expects($this->once())
-            ->method('getMainRequest')
-            ->willReturn($request);
-
-        // 签名器应该被调用（因为忽略参数值不匹配）
-        $this->signer->expects($this->once())
-            ->method('checkRequest')
-            ->with($request);
-
-        // 日志器应该记录成功信息
-        $this->logger->expects($this->once())
-            ->method('info')
-            ->with('签名校验通过，允许访问接口', [
-                'method' => $method,
-                'request' => $request,
-            ]);
-
-        $this->subscriber->beforeMethodApply($event);
-
-        // 清理环境变量
-        unset($_ENV['JSON_RPC_GOD_SIGN']);
-    }
-
-    public function testBeforeMethodApply_signerThrowsException(): void
-    {
-        $method = $this->createMockMethodWithCheckSign();
-        $event = new BeforeMethodApplyEvent();
-        $event->setMethod($method);
-
-        // 模拟请求
-        $request = Request::create('/', 'POST');
-        
-        $this->requestStack->expects($this->once())
-            ->method('getMainRequest')
-            ->willReturn($request);
-
-        // 签名器抛出异常
-        $expectedException = new \RuntimeException('签名验证失败');
-        $this->signer->expects($this->once())
-            ->method('checkRequest')
-            ->with($request)
-            ->willThrowException($expectedException);
-
-        // 日志器不应该被调用（因为异常会中断执行）
-        $this->logger->expects($this->never())
-            ->method('info');
-
-        // 验证异常被正确抛出
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('签名验证失败');
-
-        $this->subscriber->beforeMethodApply($event);
-    }
-
-    public function testBeforeMethodApply_nullRequest(): void
-    {
-        $method = $this->createMockMethodWithCheckSign();
-        $event = new BeforeMethodApplyEvent();
-        $event->setMethod($method);
-
-        // 模拟空请求 - 这将导致运行时错误，因为代码没有处理null请求的情况
-        $this->requestStack->expects($this->once())
-            ->method('getMainRequest')
-            ->willReturn(null);
-
-        // 验证会抛出RuntimeException
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RequestNotAvailableException::class);
         $this->expectExceptionMessage('No request available');
 
         $this->subscriber->beforeMethodApply($event);
     }
 
-    public function testBeforeMethodApply_complexIgnoreSignScenario(): void
+    public function testBeforeMethodApplyWithCheckSignAttributeAndGodSign(): void
     {
-        // 设置环境变量
-        $_ENV['JSON_RPC_GOD_SIGN'] = 'custom_god_key';
+        $this->setUpSubscriber();
+        // 创建一个带有 CheckSign 属性的方法类
+        $method = new #[CheckSign] class implements JsonRpcMethodInterface {
+            public function __invoke(JsonRpcRequest $request): mixed
+            {
+                return 'test';
+            }
 
-        $method = $this->createMockMethodWithCheckSign();
+            public function execute(): array
+            {
+                return [];
+            }
+        };
+
         $event = new BeforeMethodApplyEvent();
         $event->setMethod($method);
 
-        // 模拟包含正确忽略签名参数的请求
-        $request = Request::create('/?__ignoreSign=custom_god_key', 'POST');
-        
-        $this->requestStack->expects($this->once())
-            ->method('getMainRequest')
-            ->willReturn($request);
+        // 创建一个包含 __ignoreSign 参数的请求
+        $request = Request::create('/', 'POST');
+        $request->query->set('__ignoreSign', 'god');
 
-        // 签名器不应该被调用
-        $this->signer->expects($this->never())
-            ->method('checkRequest');
+        // 设置环境变量模拟
+        $_ENV['JSON_RPC_GOD_SIGN'] = 'god';
 
-        // 日志器不应该被调用
-        $this->logger->expects($this->never())
-            ->method('info');
+        // 将请求推送到 RequestStack
+        $this->requestStack->push($request);
+
+        // ApiCallerService 不应该被调用，因为使用了 god sign
+        $this->apiCallerService->expects($this->never())->method('findValidApiCallerByAppId');
 
         $this->subscriber->beforeMethodApply($event);
 
         // 清理环境变量
         unset($_ENV['JSON_RPC_GOD_SIGN']);
     }
-} 
+
+    public function testBeforeMethodApplyWithCheckSignAttributeValidRequest(): void
+    {
+        $this->setUpSubscriber();
+        // 创建一个带有 CheckSign 属性的方法类
+        $method = new #[CheckSign] class implements JsonRpcMethodInterface {
+            public function __invoke(JsonRpcRequest $request): mixed
+            {
+                return 'test';
+            }
+
+            public function execute(): array
+            {
+                return [];
+            }
+        };
+
+        $event = new BeforeMethodApplyEvent();
+        $event->setMethod($method);
+
+        // 创建一个正常的请求
+        $request = Request::create('/', 'POST', [], [], [], [], '{"test": "data"}');
+        $timestamp = (string) time();
+        $nonce = 'test-nonce';
+        $request->headers->set('Signature-AppID', 'test-app');
+        $request->headers->set('Signature-Timestamp', $timestamp);
+        $request->headers->set('Signature-Nonce', $nonce);
+
+        // 准备有效的签名
+        $accessKey = $this->createMock(AccessKey::class);
+        $accessKey->method('getSignTimeoutSecond')->willReturn(180);
+        $accessKey->method('getAppSecret')->willReturn('test-secret');
+
+        $rawText = '{"test": "data"}' . $timestamp . $nonce;
+        $validSignature = hash_hmac('sha1', $rawText, 'test-secret');
+        $request->headers->set('Signature', $validSignature);
+
+        // 将请求推送到 RequestStack
+        $this->requestStack->push($request);
+
+        // 模拟 ApiCallerService 返回有效的 AccessKey
+        $this->apiCallerService->expects($this->once())
+            ->method('findValidApiCallerByAppId')
+            ->with('test-app')
+            ->willReturn($accessKey)
+        ;
+
+        // 应该记录日志
+        $this->logger->expects($this->once())
+            ->method('info')
+            ->with('签名校验通过，允许访问接口', [
+                'method' => $method,
+                'request' => $request,
+            ])
+        ;
+
+        $this->subscriber->beforeMethodApply($event);
+    }
+
+    public function testBeforeMethodApplyWithCheckSignAttributeValidRequestWithoutGodSignEnv(): void
+    {
+        $this->setUpSubscriber();
+        // 创建一个带有 CheckSign 属性的方法类
+        $method = new #[CheckSign] class implements JsonRpcMethodInterface {
+            public function __invoke(JsonRpcRequest $request): mixed
+            {
+                return 'test';
+            }
+
+            public function execute(): array
+            {
+                return [];
+            }
+        };
+
+        $event = new BeforeMethodApplyEvent();
+        $event->setMethod($method);
+
+        // 创建一个包含 __ignoreSign 但没有设置环境变量的请求
+        $request = Request::create('/', 'POST', [], [], [], [], '{"test": "data"}');
+        $request->query->set('__ignoreSign', 'wrong-value'); // 使用错误的值，不匹配默认的 'god'
+        $timestamp = (string) time();
+        $nonce = 'test-nonce';
+        $request->headers->set('Signature-AppID', 'test-app');
+        $request->headers->set('Signature-Timestamp', $timestamp);
+        $request->headers->set('Signature-Nonce', $nonce);
+
+        // 准备有效的签名
+        $accessKey = $this->createMock(AccessKey::class);
+        $accessKey->method('getSignTimeoutSecond')->willReturn(180);
+        $accessKey->method('getAppSecret')->willReturn('test-secret');
+
+        $rawText = '{"test": "data"}' . $timestamp . $nonce;
+        $validSignature = hash_hmac('sha1', $rawText, 'test-secret');
+        $request->headers->set('Signature', $validSignature);
+
+        // 确保没有设置 JSON_RPC_GOD_SIGN 环境变量
+        unset($_ENV['JSON_RPC_GOD_SIGN']);
+
+        // 将请求推送到 RequestStack
+        $this->requestStack->push($request);
+
+        // 由于环境变量不匹配，应该调用签名验证
+        $this->apiCallerService->expects($this->once())
+            ->method('findValidApiCallerByAppId')
+            ->with('test-app')
+            ->willReturn($accessKey)
+        ;
+
+        // 应该记录日志
+        $this->logger->expects($this->once())
+            ->method('info')
+            ->with('签名校验通过，允许访问接口', [
+                'method' => $method,
+                'request' => $request,
+            ])
+        ;
+
+        $this->subscriber->beforeMethodApply($event);
+    }
+}

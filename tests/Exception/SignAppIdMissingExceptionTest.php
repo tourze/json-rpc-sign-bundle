@@ -4,17 +4,20 @@ declare(strict_types=1);
 
 namespace Tourze\JsonRPCSignBundle\Tests\Exception;
 
-use PHPUnit\Framework\TestCase;
-use Tourze\JsonRPC\Core\Exception\JsonRpcExceptionInterface;
+use PHPUnit\Framework\Attributes\CoversClass;
 use Tourze\JsonRPCSignBundle\Exception\SignAppIdMissingException;
+use Tourze\PHPUnitBase\AbstractExceptionTestCase;
 
-class SignAppIdMissingExceptionTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(SignAppIdMissingException::class)]
+final class SignAppIdMissingExceptionTest extends AbstractExceptionTestCase
 {
     public function testDefaultExceptionValues(): void
     {
         $exception = new SignAppIdMissingException();
 
-        $this->assertInstanceOf(JsonRpcExceptionInterface::class, $exception);
         $this->assertEquals(-32600, $exception->getCode());
         $this->assertEquals(-32600, $exception->getErrorCode());
         $this->assertEquals('缺少必要的签名AppID', $exception->getMessage());
