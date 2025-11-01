@@ -18,7 +18,7 @@
     "symfony/yaml": "^7.3",
     "tourze/access-key-bundle": "0.1.*",
     "tourze/bundle-dependency": "1.*",
-    "tourze/doctrine-helper": "0.0.*",
+    "tourze/doctrine-helper": "1.0.*",
     "tourze/json-rpc-core": "1.0.*",
     "tourze/symfony-dependency-service-loader": "1.*"
   },
