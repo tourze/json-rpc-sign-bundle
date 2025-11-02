@@ -16,7 +16,7 @@
     "symfony/http-kernel": "^7.3",
     "symfony/property-access": "^7.3",
     "symfony/yaml": "^7.3",
-    "tourze/access-key-bundle": "0.1.*",
+    "tourze/access-key-bundle": "1.0.*",
     "tourze/bundle-dependency": "1.*",
     "tourze/doctrine-helper": "1.0.*",
     "tourze/json-rpc-core": "1.0.*",
