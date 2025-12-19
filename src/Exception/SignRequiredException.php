@@ -4,7 +4,7 @@ namespace Tourze\JsonRPCSignBundle\Exception;
 
 use Tourze\JsonRPC\Core\Exception\JsonRpcExceptionInterface;
 
-class SignRequiredException extends \RuntimeException implements JsonRpcExceptionInterface
+final class SignRequiredException extends \RuntimeException implements JsonRpcExceptionInterface
 {
     /**
      * @param array<string, mixed> $data

@@ -4,7 +4,7 @@ namespace Tourze\JsonRPCSignBundle\Exception;
 
 use Tourze\JsonRPC\Core\Exception\JsonRpcExceptionInterface;
 
-class SignAppIdNotFoundException extends \RuntimeException implements JsonRpcExceptionInterface
+final class SignAppIdNotFoundException extends \RuntimeException implements JsonRpcExceptionInterface
 {
     /**
      * @param array<string, mixed> $data

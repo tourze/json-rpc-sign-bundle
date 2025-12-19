@@ -7,7 +7,7 @@ use Tourze\JsonRPC\Core\Exception\JsonRpcExceptionInterface;
 /**
  * 签名错误报错
  */
-class SignErrorException extends \RuntimeException implements JsonRpcExceptionInterface
+final class SignErrorException extends \RuntimeException implements JsonRpcExceptionInterface
 {
     /**
      * @param array<string, mixed> $data

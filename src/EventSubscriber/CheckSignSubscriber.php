@@ -25,7 +25,7 @@ use Tourze\JsonRPCSignBundle\Service\Signer;
  * @see https://help.aliyun.com/document_detail/131955.html
  */
 #[WithMonologChannel(channel: 'procedure')]
-readonly class CheckSignSubscriber
+final readonly class CheckSignSubscriber
 {
     public function __construct(
         private RequestStack $requestStack,

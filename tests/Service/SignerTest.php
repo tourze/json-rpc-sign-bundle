@@ -9,7 +9,6 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Tourze\AccessKeyBundle\Entity\AccessKey;
-use Tourze\AccessKeyBundle\Service\ApiCallerService;
 use Tourze\JsonRPCSignBundle\Exception\SignAppIdMissingException;
 use Tourze\JsonRPCSignBundle\Exception\SignAppIdNotFoundException;
 use Tourze\JsonRPCSignBundle\Exception\SignErrorException;
@@ -28,35 +27,25 @@ final class SignerTest extends AbstractIntegrationTestCase
 {
     protected function onSetUp(): void
     {
-        // 在集成测试中为基础测试设置默认的 mock 服务
-        if (!self::getContainer()->has(ApiCallerService::class)) {
-            $apiCallerService = $this->createMock(ApiCallerService::class);
-            self::getContainer()->set(ApiCallerService::class, $apiCallerService);
-        }
-
-        if (!self::getContainer()->has('monolog.logger.json_rpc_sign')) {
-            $logger = $this->createMock(LoggerInterface::class);
-            self::getContainer()->set('monolog.logger.json_rpc_sign', $logger);
-        }
-    }
-
-    private function createSignerWithMocks(ApiCallerService $apiCallerService, LoggerInterface $logger): Signer
-    {
-        // 在获取服务前先将Mock注入容器，但只在服务未初始化时设置
-        if (!self::getContainer()->initialized(ApiCallerService::class)) {
-            self::getContainer()->set(ApiCallerService::class, $apiCallerService);
-        }
-        if (!self::getContainer()->initialized('monolog.logger.json_rpc_sign')) {
-            self::getContainer()->set('monolog.logger.json_rpc_sign', $logger);
-        }
-
-        // 从容器获取服务实例，而不是直接实例化
-        return self::getService(Signer::class);
+        // 集成测试不需要任何 Mock 设置
     }
 
     private function getSigner(): Signer
     {
         return self::getService(Signer::class);
+    }
+
+    private function createAccessKey(string $appId, string $appSecret, int $timeout = 180): AccessKey
+    {
+        $accessKey = new AccessKey();
+        $accessKey->setAppId($appId);
+        $accessKey->setAppSecret($appSecret);
+        $accessKey->setTitle('Test Access Key for ' . $appId);
+        $accessKey->setValid(true);
+        $accessKey->setSignTimeoutSecond($timeout);
+        $this->persistAndFlush($accessKey);
+
+        return $accessKey;
     }
 
     public function testGetRequestNonceWithValidNonce(): void
@@ -163,11 +152,8 @@ final class SignerTest extends AbstractIntegrationTestCase
 
     public function testCheckRequestAppIdNotFound(): void
     {
-        $apiCallerService = $this->createMock(ApiCallerService::class);
-        $apiCallerService->method('findValidApiCallerByAppId')->willReturn(null);
-        $logger = $this->createMock(LoggerInterface::class);
-
-        $signer = $this->createSignerWithMocks($apiCallerService, $logger);
+        // 不创建任何 AccessKey，让查询自然返回 null
+        $signer = $this->getSigner();
         $request = Request::create('/', 'POST');
         $request->headers->set('Signature-AppID', 'nonexistent-app');
 
@@ -177,14 +163,9 @@ final class SignerTest extends AbstractIntegrationTestCase
 
     public function testCheckRequestMissingTimestamp(): void
     {
-        $accessKey = $this->createMock(AccessKey::class);
-        $accessKey->method('getSignTimeoutSecond')->willReturn(180);
+        $this->createAccessKey('test-app', 'test-secret', 180);
 
-        $apiCallerService = $this->createMock(ApiCallerService::class);
-        $apiCallerService->method('findValidApiCallerByAppId')->willReturn($accessKey);
-        $logger = $this->createMock(LoggerInterface::class);
-
-        $signer = $this->createSignerWithMocks($apiCallerService, $logger);
+        $signer = $this->getSigner();
         $request = Request::create('/', 'POST');
         $request->headers->set('Signature-AppID', 'test-app');
         // 缺少 Signature-Timestamp header
@@ -195,14 +176,9 @@ final class SignerTest extends AbstractIntegrationTestCase
 
     public function testCheckRequestExpiredTimestamp(): void
     {
-        $accessKey = $this->createMock(AccessKey::class);
-        $accessKey->method('getSignTimeoutSecond')->willReturn(180);
+        $this->createAccessKey('test-app', 'test-secret', 180);
 
-        $apiCallerService = $this->createMock(ApiCallerService::class);
-        $apiCallerService->method('findValidApiCallerByAppId')->willReturn($accessKey);
-        $logger = $this->createMock(LoggerInterface::class);
-
-        $signer = $this->createSignerWithMocks($apiCallerService, $logger);
+        $signer = $this->getSigner();
         $request = Request::create('/', 'POST');
         $request->headers->set('Signature-AppID', 'test-app');
         $request->headers->set('Signature-Timestamp', (string) (time() - 300)); // 5分钟前，超出3分钟允许范围
@@ -213,14 +189,9 @@ final class SignerTest extends AbstractIntegrationTestCase
 
     public function testCheckRequestMissingSignature(): void
     {
-        $accessKey = $this->createMock(AccessKey::class);
-        $accessKey->method('getSignTimeoutSecond')->willReturn(180);
+        $this->createAccessKey('test-app', 'test-secret', 180);
 
-        $apiCallerService = $this->createMock(ApiCallerService::class);
-        $apiCallerService->method('findValidApiCallerByAppId')->willReturn($accessKey);
-        $logger = $this->createMock(LoggerInterface::class);
-
-        $signer = $this->createSignerWithMocks($apiCallerService, $logger);
+        $signer = $this->getSigner();
         $request = Request::create('/', 'POST');
         $request->headers->set('Signature-AppID', 'test-app');
         $request->headers->set('Signature-Timestamp', (string) time());
@@ -233,15 +204,9 @@ final class SignerTest extends AbstractIntegrationTestCase
 
     public function testCheckRequestInvalidSignature(): void
     {
-        $accessKey = $this->createMock(AccessKey::class);
-        $accessKey->method('getSignTimeoutSecond')->willReturn(180);
-        $accessKey->method('getAppSecret')->willReturn('test-secret');
+        $this->createAccessKey('test-app', 'test-secret', 180);
 
-        $apiCallerService = $this->createMock(ApiCallerService::class);
-        $apiCallerService->method('findValidApiCallerByAppId')->willReturn($accessKey);
-        $logger = $this->createMock(LoggerInterface::class);
-
-        $signer = $this->createSignerWithMocks($apiCallerService, $logger);
+        $signer = $this->getSigner();
         $request = Request::create('/', 'POST', [], [], [], [], '{"test": "data"}');
         $timestamp = (string) time();
         $request->headers->set('Signature-AppID', 'test-app');
@@ -255,21 +220,14 @@ final class SignerTest extends AbstractIntegrationTestCase
 
     public function testCheckRequestValidSignatureHmacSha1(): void
     {
-        $accessKey = $this->createMock(AccessKey::class);
-        $accessKey->expects($this->once())->method('getSignTimeoutSecond')->willReturn(180);
-        $accessKey->expects($this->once())->method('getAppSecret')->willReturn('test-secret');
+        $this->createAccessKey('test-app', 'test-secret', 180);
 
-        $apiCallerService = $this->createMock(ApiCallerService::class);
-        $apiCallerService->expects($this->once())
-            ->method('findValidApiCallerByAppId')
-            ->with('test-app')
-            ->willReturn($accessKey)
-        ;
-
+        // 对于需要验证日志行为的测试，使用 Mock Logger
         $logger = $this->createMock(LoggerInterface::class);
         $logger->expects($this->never())->method('warning'); // 验证成功时不应记录警告
+        self::getContainer()->set('monolog.logger.json_rpc_sign', $logger);
 
-        $signer = $this->createSignerWithMocks($apiCallerService, $logger);
+        $signer = $this->getSigner();
         $request = Request::create('/', 'POST', [], [], [], [], '{"test": "data"}');
         $timestamp = (string) time();
         $nonce = 'test-nonce';
@@ -290,21 +248,14 @@ final class SignerTest extends AbstractIntegrationTestCase
 
     public function testCheckRequestValidSignatureMd5(): void
     {
-        $accessKey = $this->createMock(AccessKey::class);
-        $accessKey->expects($this->once())->method('getSignTimeoutSecond')->willReturn(180);
-        $accessKey->expects($this->once())->method('getAppSecret')->willReturn('test-secret');
+        $this->createAccessKey('test-app', 'test-secret', 180);
 
-        $apiCallerService = $this->createMock(ApiCallerService::class);
-        $apiCallerService->expects($this->once())
-            ->method('findValidApiCallerByAppId')
-            ->with('test-app')
-            ->willReturn($accessKey)
-        ;
-
+        // 对于需要验证日志行为的测试，使用 Mock Logger
         $logger = $this->createMock(LoggerInterface::class);
         $logger->expects($this->never())->method('warning'); // 验证成功时不应记录警告
+        self::getContainer()->set('monolog.logger.json_rpc_sign', $logger);
 
-        $signer = $this->createSignerWithMocks($apiCallerService, $logger);
+        $signer = $this->getSigner();
         $request = Request::create('/', 'POST', [], [], [], [], '{"test": "data"}');
         $timestamp = (string) time();
         $nonce = 'test-nonce';
